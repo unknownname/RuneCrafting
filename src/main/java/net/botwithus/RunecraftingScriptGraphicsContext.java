@@ -78,6 +78,7 @@ public class RunecraftingScriptGraphicsContext extends ScriptGraphicsContext {
                     ImGui.Text("Number of Runes: " + script.numberofrunecrated );
                     //ImGui.Separator();
                     ImGui.Text("Crafted Runes Per Hour: " + script.runeperhour);
+                    ImGui.Text("Magical Thread Count: " + script.maigcalthreadcount);
                     ImGui.Separator();
 
 
@@ -87,7 +88,7 @@ public class RunecraftingScriptGraphicsContext extends ScriptGraphicsContext {
                 }
                 if (ImGui.BeginTabItem("Config", ImGuiWindowFlag.None.getValue())) {
                     ImGui.Text("Please Choose the rune to craft");
-                    script.NecroRunes();
+                    script.Runes();
                     script.setBraclet(ImGui.Checkbox("Bracelet Available" , script.isBraclet()));
                     //ImGui.Combo("Runes",script.currentItem,items);
                     //ImGui.Text("Selected Rune" + items[currentItem[0]]);

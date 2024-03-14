@@ -1,2 +1,2 @@
-rootProject.name = "RuneCraftingNecro"
+rootProject.name = "RuneCrafting"
 

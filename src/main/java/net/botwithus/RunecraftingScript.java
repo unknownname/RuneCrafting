@@ -7,9 +7,15 @@ import net.botwithus.rs3.events.impl.InventoryUpdateEvent;
 import net.botwithus.rs3.game.*;
 import net.botwithus.rs3.game.actionbar.ActionBar;
 import net.botwithus.rs3.game.hud.interfaces.Interfaces;
+import net.botwithus.rs3.game.movement.Movement;
+import net.botwithus.rs3.game.movement.NavPath;
+import net.botwithus.rs3.game.movement.TraverseEvent;
+import net.botwithus.rs3.game.queries.builders.characters.NpcQuery;
 import net.botwithus.rs3.game.queries.builders.items.InventoryItemQuery;
 import net.botwithus.rs3.game.queries.builders.objects.SceneObjectQuery;
+import net.botwithus.rs3.game.queries.results.EntityResultSet;
 import net.botwithus.rs3.game.queries.results.ResultSet;
+import net.botwithus.rs3.game.scene.entities.characters.npc.Npc;
 import net.botwithus.rs3.game.scene.entities.characters.player.LocalPlayer;
 import net.botwithus.rs3.game.scene.entities.object.SceneObject;
 import net.botwithus.rs3.game.vars.VarManager;
@@ -20,36 +26,45 @@ import net.botwithus.rs3.script.LoopingScript;
 import net.botwithus.rs3.script.Script;
 import net.botwithus.rs3.script.config.ScriptConfig;
 import net.botwithus.rs3.util.Regex;
+import net.botwithus.rs3.game.*;
 
 
 import java.time.Instant;
+import java.util.List;
 import java.util.Objects;
 import java.util.Random;
 import java.util.regex.Pattern;
+import java.util.stream.Collectors;
 
 public class RunecraftingScript extends LoopingScript {
 
     private BotState botState = BotState.IDLE;
     private boolean someBool = true;
-    private boolean Bracelet = true;
+    private boolean wildernesssword = true;
 
     private Random random = new Random();
-    private Pattern Impure = Regex.getPatternForContainingOneOf("Impure Essesnce", "Impure essence");
+    private Pattern essence = Regex.getPatternForContainingOneOf("Pure essence", "essence");
     private Pattern NumberofRunes = Regex.getPatternForContainingOneOf("rune");
+    private Pattern enterance = Regex.getPatternForContainingOneOf("Tendrils", "Rock","Gap","Eyes");
+    private Pattern action = Regex.getPatternForContainingOneOf("Squeeze-through","Distract","Mine","Chop");
     //public long scriptStartTime;
     public long scriptStartTime = System.currentTimeMillis();
     //NativeInteger currentItem = new NativeInteger(0);
-    String[] options = {"Spirit","Bone","Flesh","Miasma"};
+    String[] options = {"Nature","Fire","Water","Air", "Blood", "Death, Astral"};
     private int currentItem = 0;
     public int numberofrunecrated  = 0;
+    public int maigcalthreadcount =0;
     public int runeperhour = 0;
+    private Area edgevilleBank = new Area.Rectangular(new Coordinate(3089,3503,0), new Coordinate(3085,3495,0));
+    private Area Mage = new Area.Rectangular(new Coordinate(3102,3554,0), new Coordinate(3097,3543,0));
+    private Area Abyss = new Area.Rectangular(new Coordinate(3041,4842,0), new Coordinate(3038,4845,0));
 
     // public int getStartingRunecraftingLevel()
     //{
     //    return startingRunecraftingLevel();
     //}
 
-    public void NecroRunes()
+    public void Runes()
     {
         NativeInteger currentItemNative = new NativeInteger(currentItem);
         if (ImGui.Combo("Rune", currentItemNative,  options))
@@ -58,12 +73,7 @@ public class RunecraftingScript extends LoopingScript {
             println("Rune Selected" + options[currentItem]);
         }
     }
-    enum Runes{
-        Spirit,
-        Bone,
-        Flesh,
-        Miasma;
-    }
+
 
     private Area TaverleyArea = new Area.Rectangular(new Coordinate(2917,3427,0), new Coordinate(2925,3433,0));
 
@@ -78,12 +88,25 @@ public class RunecraftingScript extends LoopingScript {
 
     public RunecraftingScript(String s, ScriptConfig scriptConfig, ScriptDefinition scriptDefinition) {
         super(s, scriptConfig, scriptDefinition);
-        this.sgc = new RunecraftingScriptGraphicsContext(getConsole(), this);
 
-        runecrafted();
+
+
 
         //updatestatis();
     }
+
+    @Override
+    public boolean initialize()
+    {
+
+        this.sgc = new RunecraftingScriptGraphicsContext(getConsole(), this);
+        setActive(false);
+        runecrafted();
+
+        return super.initialize();
+
+    }
+
 
     @Override
     public void onLoop() {
@@ -98,26 +121,13 @@ public class RunecraftingScript extends LoopingScript {
         switch (botState) {
             case IDLE -> {
                 //do nothing
+                setActive(false);
                 println("We're idle!");
                 Execution.delay(random.nextLong(1000,3000));
             }
             case SKILLING -> {
-                //do some code that handles your skilling
-                //Execution.delay(regionIDFinder(player));
-                //scriptStartTime = System.currentTimeMillis();
-                Execution.delay(handleSkilling(player));
-                //println("Selected Rune" + currentItem);
-                //runecrafted();
-                //println("Selected Rune" + options[currentItem]);
-                //println("Small Pouch Large" +VarManager.getVarbitValue(16499));
-                //println("Small Pouch Gaint" +VarManager.getVarbitValue(16500));
-                //println("Small Pouch Medium" +VarManager.getVarbitValue(16498));
-                //println("Small Pouch Small" +VarManager.getVarbitValue(16497));
-                //checkRunePouchesAndHandleBanking(player);
-                //println("Small Pouch Empty" +VarManager.getVarbitValue(3218));
-                //println("Small  Var Domain" + VarManager.getVarDomain(3214));
-                //println("Small  Var Fill1" + VarManager.getVarValue(VarDomainType.PLAYER,3214));
-                //println("Small  Var Empty2" + VarManager.getVarValue(VarDomainType.PLAYER,3215));
+               Execution.delay(handleSkilling(player));
+
             }
             case BANKING -> {
                 //handle your banking logic, etc\
@@ -143,20 +153,26 @@ public class RunecraftingScript extends LoopingScript {
                     return;
                 }
                 String runeName = item.getName();
+                String maigcalthread = item.getName();
                 //println("Rune Name:" + runeName);
                 if (runeName != null) {
-                    if (runeName.equalsIgnoreCase(options[currentItem] + " rune")) {
+                    if (runeName.contains( " rune")) {
                         numberofrunecrated = numberofrunecrated + item.getStackSize();
-                        println("Number of Runes Crafted: " + options[currentItem] + "Rune: " + numberofrunecrated);
-                        //println("Number of items crated" + numberofrunecrated);
-                        //equalsIgnoreCase(options[currentItem]
+
+                    }
+                }
+                if(maigcalthread != null)
+                {
+                    if(maigcalthread.contains( "Magical thread"))
+                    {
+                        maigcalthreadcount = maigcalthreadcount + item.getStackSize();
                     }
                 }
 
             }
             long currenttime = (System.currentTimeMillis() - scriptStartTime) /1000;
             runeperhour = (int)(Math.round(3600.0 / currenttime * numberofrunecrated));
-            println(" Runes per Hour" + runeperhour);
+            //println(" Runes per Hour" + runeperhour);
 
         });
 
@@ -173,47 +189,34 @@ public class RunecraftingScript extends LoopingScript {
         if (Bank.isOpen())
         {
             println("Bank is open");
-            ResultSet<Item> ImpureEssence = InventoryItemQuery.newQuery(95).name("Impure essence").results();
-            if(!ImpureEssence.isEmpty())
-                for(Item item : ImpureEssence)
-            {
-               // println("Name: " + item.getName() + "Stack: " + item.getStackSize());
-
-                if (item.getStackSize() > 0)
-                {
-                    println(" Available Impure essence" + item.getStackSize());
-                    Bank.loadPreset(2);
-                }
-                else
-                {
-                    println(" Not enough Impure essence");
-                    botState = BotState.IDLE;
-                }
-
-            }
-
-
-       //         Bank.loadPreset(2);
+            Bank.loadLastPreset();
+              Bank.loadPreset(2);
 
             //Bank.loadPreset(2);
             botState = BotState.SKILLING;
             return random.nextLong(1000,3000);
-        }
-        SceneObject BankChest = SceneObjectQuery.newQuery().name("Bank chest").option("Use").results().nearest();
-        if (BankChest != null)
+        }else
         {
-           // WalkToTaverleyBank(player);
-            println("Interacted bank: " + BankChest.interact("Use"));
-        }
+            ResultSet<Item> playerinventory = InventoryItemQuery.newQuery().results();
+            if (!Backpack.contains(essence) && player.getAnimationId() == -1) {
+            if (Movement.traverse(NavPath.resolve(edgevilleBank.getRandomWalkableCoordinate())) == TraverseEvent.State.FINISHED)
+            {
+                println("Reached Edgeville Bank Area");
+            } else
+            {
+                println("Unable to reach EdgeVill Bank Area");
+            }
 
-        ResultSet<Item> playerinventory = InventoryItemQuery.newQuery(93).results();
-        if (!Backpack.contains(Impure) && player.getCoordinate().getRegionId() == 5150 && player.getAnimationId() ==-1 )
-        {
-            //println("Player Inventory" + playerinventory);
-            println("Action Bar value" + ActionBar.useItem("Tome of Um 2", 1));
-            return random.nextLong(1000,2000);
-        }
+                SceneObject BankChest = SceneObjectQuery.newQuery().name("Counter").option("Bank").results().nearest();
+                if (BankChest != null) {
+                    // WalkToTaverleyBank(player);
+                    println("Interacted bank: " + BankChest.interact("Bank"));
+                }
 
+
+
+            }
+        }
 
         return random.nextLong(1500,3000);
     }
@@ -222,7 +225,7 @@ public class RunecraftingScript extends LoopingScript {
              return random.nextLong(150,3000);
 
 
-         if (!Backpack.containsAllOf("Impure essence") && !checkRunePouchesAndHandleBanking())
+         if (!Backpack.containsAllOf("Pure essence"))
          {
 
              println("Going to banking state");
@@ -230,164 +233,94 @@ public class RunecraftingScript extends LoopingScript {
              //Execution.delayUntil(3000, () -> !Interfaces.isOpen(1251));
              return random.nextLong(1500,3000);
          }
-
-         println("Player moving:" +player.isMoving());
-        println("Player Animation ID :" +player.getAnimationId());
+        /*println("Player moving:" +player.isMoving());
+        println("Player Animation ID :" +player.getAnimationId());*/
         println("Region ID Before Portal Check" + player.getCoordinate().getRegionId());
-        //println("Direction 1: " + player.getDirection1());
-        //println("Direction 1: " + player.getDirection2());
-        if(Bracelet == true)
+
+        if (!(options[currentItem] == "Astral") && player.getCoordinate().getRegionId() != 12107 && player.getCoordinate().getRegionId() != 9547){
+
+            if(Movement.traverse(NavPath.resolve(Mage.getRandomWalkableCoordinate())) == TraverseEvent.State.FINISHED){
+                Npc Wizard = NpcQuery.newQuery().name("Mage of Zamorak").results().nearest();
+                if(Wizard != null)
+                {
+                    println("Mage Zam Detected" + Wizard.interact("Teleport"));
+                    Execution.delayUntil( 4000, () -> player.getCoordinate().getRegionId() == 12107);
+
+                }
+                else
+                {
+                    println("Mage Zam Is Missing");
+
+                }
+
+
+            }
+            else{
+                println("Fail to reach the area");
+            }
+            return random.nextLong(1000,3000);
+        }
+
+        if(player.getCoordinate().getRegionId() == 12107) {
+            SceneObject travesal = SceneObjectQuery.newQuery().name( "Rock","Gap","Eyes","Boil").results().nearest();
+
+            SceneObject Naturerift = SceneObjectQuery.newQuery().name("Nature rift").results().nearest();
+            SceneObject Bloodrift = SceneObjectQuery.newQuery().name("Blood rift").results().nearest();
+            SceneObject Astralerift = SceneObjectQuery.newQuery().name("Nature rift").results().nearest();
+            Npc innermage = NpcQuery.newQuery().name("Dark mage").results().nearest();
+            //println("Travel" + travesal);
+
+            if (travesal != null && player.distanceTo(innermage) >= 16) {
+                println("Interact" + travesal.interact("Squeeze-through"));
+                println("Interact" + travesal.interact("Distract"));
+                println("Interact" + travesal.interact("Mine"));
+                println("Interact" + travesal.interact("Burn-down"));
+                Execution.delayUntil(4000,() ->{
+                    return player.distanceTo(innermage) <16;
+                });
+
+            } else {
+                println("Not able to find to get inside the Abyss");
+            }
+
+            //SceneObject Naturerift = SceneObjectQuery.newQuery().name("Nature rift").results().nearest();
+            //println("Distance to inner mage" + player.distanceTo(innermage));
+            if (Naturerift != null && player.distanceTo(innermage) <16  && options[currentItem] == "Nature") {
+                println("Interact with Nature Rift" + Naturerift.interact("Exit-through"));
+                Execution.delayUntil(2000, () -> {
+                    return player.distanceTo(Naturerift) <3;
+                });
+            }else if(Bloodrift != null && player.distanceTo(innermage) <16  && options[currentItem] == "Blood")
+            {
+                println("Interact with Nature Rift" + Bloodrift.interact("Exit-through"));
+                Execution.delayUntil(2000, () -> {
+                    return player.distanceTo(Naturerift) <3;
+                });
+            }
+            else {
+                println("Not able to find rift");
+            }
+
+        }
+
+        if(player.getCoordinate().getRegionId() == 9547 && options[currentItem] == "Nature")
         {
-            if(player.getCoordinate().getRegionId() !=4636 && player.getCoordinate().getRegionId() != 5150 ) {
-                ActionBar.useItem("Passing bracelet", 2);
+            SceneObject naturealtar = SceneObjectQuery.newQuery().name("Nature altar").ids(2486).results().nearest();
+            if(naturealtar !=null )
+            {
+                println("Interact with Nature Runes Altar" + naturealtar.interact("Craft-rune"));
+                Execution.delay(2000);
             }
-            SceneObject Portal = SceneObjectQuery.newQuery().name("Dark portal").option("Enter").results().nearest();
-            if (Portal != null && player.getCoordinate().getRegionId() != 5150 && !player.isMoving())
-            {
-                println("Region ID After Portal Select " + player.getCoordinate().getRegionId());
-                println("Interact with portal" + Portal.interact("Enter"));
-
-                return random.nextLong(1000,2000);
-
-            }
-
-            if (player.getCoordinate().getRegionId() == 5150 && options[currentItem] == "Miasma")
-            {
-
-                SceneObject Miasma = SceneObjectQuery.newQuery().name("Miasma altar").option("Craft runes").results().nearest();
-                if(Miasma !=null )
-                {
-                    println("Interact with Miasma Runes Altar" + Miasma.interact("Craft runes"));
-                    Execution.delay(2000);
-                }
-            }else if (player.getCoordinate().getRegionId() == 5150 && options[currentItem] == "Spirit")
-            {
-                SceneObject Spirit = SceneObjectQuery.newQuery().name("Spirit altar").option("Craft runes").results().nearest();
-                if(Spirit !=null )
-                {
-                    println("Interact with Runes Altar" + Spirit.interact("Craft runes"));
-                    Execution.delay(2000);
-                }
-            }else if (player.getCoordinate().getRegionId() == 5150 && options[currentItem] == "Bone")
-            {
-                SceneObject Bone = SceneObjectQuery.newQuery().name("Bone altar").option("Craft runes").results().nearest();
-                if(Bone !=null )
-                {
-                    println("Interact with Bone Runes Altar" + Bone.interact("Craft runes"));
-                    Execution.delay(2000);
-                }
-            }else if (player.getCoordinate().getRegionId() == 5150 && options[currentItem] == "Flesh")
-            {
-                SceneObject Flesh = SceneObjectQuery.newQuery().name("Flesh altar").option("Craft runes").results().nearest();
-                if(Flesh !=null )
-                {
-                    println("Interact with Flesh Runes Altar" + Flesh.interact("Craft runes"));
-                    Execution.delay(2000);
-                }
-            }
-
-        } else {
-
-            SceneObject Portal = SceneObjectQuery.newQuery().name("Dark portal").option("Enter").results().nearest();
-            if (Portal != null && player.getCoordinate().getRegionId() != 5150 && !player.isMoving()) {
-                println("Region ID After Portal Select " + player.getCoordinate().getRegionId());
-                println("Interact with portal" + Portal.interact("Enter"));
-
-                return random.nextLong(1000, 2000);
-
-            }
-
-            if (player.getCoordinate().getRegionId() == 5150 && options[currentItem] == "Miasma") {
-
-                SceneObject Miasma = SceneObjectQuery.newQuery().name("Miasma altar").option("Craft runes").results().nearest();
-                if (Miasma != null) {
-                    println("Interact with Miasma Runes Altar" + Miasma.interact("Craft runes"));
-                    Execution.delay(2000);
-                }
-            } else if (player.getCoordinate().getRegionId() == 5150 && options[currentItem] == "Spirit") {
-                SceneObject Spirit = SceneObjectQuery.newQuery().name("Spirit altar").option("Craft runes").results().nearest();
-                if (Spirit != null) {
-                    println("Interact with Runes Altar" + Spirit.interact("Craft runes"));
-                    Execution.delay(2000);
-                }
-            } else if (player.getCoordinate().getRegionId() == 5150 && options[currentItem] == "Bone") {
-                SceneObject Bone = SceneObjectQuery.newQuery().name("Bone altar").option("Craft runes").results().nearest();
-                if (Bone != null) {
-                    println("Interact with Bone Runes Altar" + Bone.interact("Craft runes"));
-                    Execution.delay(2000);
-                }
-            } else if (player.getCoordinate().getRegionId() == 5150 && options[currentItem] == "Flesh") {
-                SceneObject Flesh = SceneObjectQuery.newQuery().name("Flesh altar").option("Craft runes").results().nearest();
-                if (Flesh != null) {
-                    println("Interact with Flesh Runes Altar" + Flesh.interact("Craft runes"));
-                    Execution.delay(2000);
-                }
+        }else if (player.getCoordinate().getRegionId() == 9804 && options[currentItem] == "Blood")
+        {
+            SceneObject bloodaltar = SceneObjectQuery.newQuery().name("Blood altar").results().nearest();
+            if(bloodaltar !=null) {
+                println("Interact with Nature Runes Altar" + bloodaltar.interact("Craft-rune"));
+                Execution.delay(2000);
             }
         }
 
         return random.nextLong(1500,3000);
-    }
-
-
-    public boolean checkRunePouchesAndHandleBanking()
-    {
-
-
-        InventoryItemQuery runePouchQuery = InventoryItemQuery.newQuery().ids(5514,5509,5510,5512);
-        ResultSet<Item> runePouches = runePouchQuery.results();
-        boolean hasRunes = false;
-
-        if(!runePouches.isEmpty())
-        {
-            for (Item pouch : runePouches)
-            {
-                boolean containsRunes = checkPouchForRunes(pouch, 55667);
-                if(containsRunes)
-                {
-                    println("Rune pouch contains runes");
-                }
-                else
-                {
-                    println("Pouch contains no runes");
-                }
-            }
-
-        }
-        println("No rune pouch founded in the inventory");
-        return false;
-
-    }
-
-    private boolean isRunePouch(Item item)
-    {
-        InventoryItemQuery pouch = InventoryItemQuery.newQuery().ids(5514,5509,5510,5512);
-        if (Backpack.contains(5514,5509,5510,5512)) {
-
-            println("There is rune pouch in the inventory");
-            return true;
-        }
-
-        return false;
-    }
-
-    private boolean checkPouchForRunes (Item pouch, int i)
-    {
-        //int GaintPouchVarbitID =16500;
-        //ResultSet<Item> GaintRunePouch = InventoryItemQuery.newQuery().ids(5514).results();
-        int SmallPouchValue = VarManager.getVarbitValue(16497);
-        int MediumPouchValue = VarManager.getVarbitValue(16498);
-        int LargePouchValue = VarManager.getVarbitValue(16499);
-        int GaintPouchValue = VarManager.getVarbitValue(16500);
-        if (GaintPouchValue > 0 && SmallPouchValue >0 && MediumPouchValue >0 && LargePouchValue >0)
-        {
-            println("The Small rune pouch contains runes:"  + VarManager.getVarbitValue(16497));
-            println("The Medium rune pouch contains runes:"  + VarManager.getVarbitValue(16498));
-            println("The Large rune pouch contains runes:"  + VarManager.getVarbitValue(16499));
-            println("The Gaint rune pouch contains runes:"  + VarManager.getVarbitValue(16500));
-            return true;
-        }
-        return false;
-
     }
 
 
@@ -404,10 +337,10 @@ public class RunecraftingScript extends LoopingScript {
     }
 
     public boolean isBraclet() {
-        return Bracelet;
+        return wildernesssword;
     }
     public void setBraclet(boolean Bracelet) {
-        this.Bracelet = Bracelet;
+        this.wildernesssword = Bracelet;
     }
 
 
